@@ -11,12 +11,10 @@
  * 2018-10-10
  */
 
-
-
 /***
  * @type {Object}
  */
-var FileUtils = new Object();
+var FileUtils = {};
 
 /***
  * Downloader Object
@@ -70,7 +68,7 @@ FileUtils.Downloader.prototype = {
     error: {},
     fileType: "",
     mimeType: ""
-}
+};
 
 /**
  * destroy
@@ -243,7 +241,7 @@ FileUtils.Downloader.prototype.saveFile = function(saveEntry, fileData) {
         console.error('Error when saveFile:' + err.toString());
         _this.onFail(-6);
     });
-}
+};
 
 /**
  * writeFile
@@ -363,7 +361,7 @@ FileUtils.Uploader.prototype.upload = function () {
             _this.getFile(fileEntry)
         })
     }catch (e) {
-        console.error("file system error");
+        console.error("file system error, please check if cordova-plugin-file has been installed");
         console.error(e);
     }
 };
@@ -373,7 +371,7 @@ FileUtils.Uploader.prototype.upload = function () {
  * @param fileEntry
  */
 FileUtils.Uploader.prototype.getFile = function (fileEntry) {
-
+  console.log(fileEntry);
     const _this = this;
 
     /*
@@ -386,12 +384,20 @@ FileUtils.Uploader.prototype.getFile = function (fileEntry) {
      */
     try{
         fileEntry.file(function (file) {
-
             //file info
-            const fileName = file.name;
+            let fileName = file.name;
+
+            if(fileName === "content"){
+              let localURL = decodeURI(file.localURL);
+              fileName = localURL.substring(localURL.lastIndexOf("/")+1);
+              if(fileName.indexOf("%2F")!==-1){
+                fileName = fileName.substring(fileName.lastIndexOf("%2F")+3);
+              }
+            }
             const fileLength = file.size;
-            const fileType = fileName.substring(fileName.lastIndexOf(".") + 1);
-            const mimeType = FileUtils.getMIMEType(fileType);
+            const mimeType = file.type;
+            // const fileType = fileName.substring(fileName.lastIndexOf(".") + 1);
+            // const mimeType = FileUtils.getMIMEType(fileType);
 
             //read file
             var reader = new FileReader();
@@ -401,7 +407,7 @@ FileUtils.Uploader.prototype.getFile = function (fileEntry) {
                 _this.post(blob, fileName);
             };
 
-            reader.readAsText(file);
+            reader.readAsArrayBuffer(file);
         })
     }catch (e) {
         console.warn(e);
@@ -432,7 +438,6 @@ FileUtils.Uploader.prototype.post = function (blob, fileName) {
         formData.append(i, _this.params[i]);
     }
     formData.append(_this.fileAlias, blob, fileName);
-
     /*
         use xhr post FormData
         and return xhr instance.
@@ -442,10 +447,19 @@ FileUtils.Uploader.prototype.post = function (blob, fileName) {
     _this.xhr = xhr;
 
     xhr.open("POST", _this.url, true);
+    // xhr.setRequestHeader("Content-Type","multipart/form-data");
+    // xhr.setRequestHeader("Content-Type","application/x-www-form-urlencoded");
+    xhr.overrideMimeType("application/octet-stream");
 
-    xhr.onload = function(result){
+    xhr.onload = function(event){
         console.log("upload finished:" + fileName);
-        _this.onSuccess(result);
+        try{
+          const response = event.currentTarget.response;
+          console.log(response);
+          _this.onSuccess(JSON.parse(response));
+        }catch (e) {
+          _this.onFail(event);
+        }
     };
 
     xhr.onprogress = function(progressEvent){
@@ -510,4 +524,11 @@ FileUtils.getMIMEType = function (fileType) {
         zip:"application/zip"
     };
     return json[fileType] || "";
+};
+
+export default {
+  FileUtils,
+  install(Vue){
+    Object.defineProperty(Vue.prototype, '$FileUtils', { value: FileUtils });
+  }
 };
